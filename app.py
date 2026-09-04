@@ -1,5 +1,7 @@
 import streamlit as st
 import datetime
+import pandas as pd
+import os
 from garminconnect import Garmin
 
 # Configuration de la page
@@ -62,7 +64,7 @@ muscle_group = st.selectbox("Groupe Musculaire", ["Jambes", "Dos", "Pectoraux", 
 
 st.markdown("---")
 
-#ANALYSE
+# ANALYSE
 st.header("Analyse et Recommandation")
 
 recovery_score = (sleep_score * 0.5) + (body_battery * 0.3) - (stress_level * 0.2)
@@ -75,3 +77,51 @@ elif recovery_score < 75:
     st.info("Recuperation moyenne. Maintiens la seance prevue mais garde une marge sur tes series (pas d'echec musculaire).")
 else:
     st.success("Feu vert. Ton corps est pret pour une seance intense.")
+
+st.markdown("---")
+
+# HISTORIQUE ET SAUVEGARDE
+st.header("Suivi des Indicateurs")
+
+# Securite : creation du dossier data s'il n'existe pas
+os.makedirs("data", exist_ok=True)
+HISTORY_FILE = "data/historique_vivolift.csv"
+
+if st.button("Sauvegarder l'etat du jour"):
+    today_str = datetime.date.today().isoformat()
+    
+    new_data = pd.DataFrame({
+        "Date": [today_str],
+        "Sommeil": [sleep_score],
+        "Stress": [stress_level],
+        "Body_Battery": [body_battery],
+        "Score_Recup": [int(recovery_score)],
+        "Seance_Prevue": [muscle_group]
+    })
+
+    if os.path.exists(HISTORY_FILE):
+        df_exist = pd.read_csv(HISTORY_FILE)
+        # Ecraser la ligne si on sauvegarde plusieurs fois le meme jour
+        if today_str in df_exist["Date"].values:
+            df_exist = df_exist[df_exist["Date"] != today_str]
+        df_final = pd.concat([df_exist, new_data], ignore_index=True)
+    else:
+        df_final = new_data
+        
+    df_final.to_csv(HISTORY_FILE, index=False)
+    st.success("Donnees enregistrees dans le dossier data !")
+
+# Affichage du graphique
+if os.path.exists(HISTORY_FILE):
+    df_history = pd.read_csv(HISTORY_FILE)
+    
+    if not df_history.empty:
+        df_chart = df_history.set_index("Date")
+        colonnes_a_tracer = ["Sommeil", "Stress", "Body_Battery", "Score_Recup"]
+        
+        st.line_chart(df_chart[colonnes_a_tracer])
+        
+        with st.expander("Voir le tableau de donnees brutes"):
+            st.dataframe(df_history)
+else:
+    st.info("Aucune donnee sauvegardee pour le moment. Clique sur le bouton au-dessus pour initialiser ton historique.")
